@@ -12,7 +12,7 @@ export function buildSalesReceiptText(
     lines.push(shop.tagline.trim());
   }
   if (shop.address.trim()) {
-    lines.push(`(${shop.address.trim()})`);
+    lines.push(`(${shop.address.trim().replace(/\s*\n\s*/g, ' ')})`);
   }
   if (shop.phone.trim()) {
     lines.push(`Contact: ${sanitizeIndianPhone(shop.phone)}`);

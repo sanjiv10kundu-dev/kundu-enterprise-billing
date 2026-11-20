@@ -208,13 +208,13 @@ export function createInitialSeedState(): AppDataState {
   const twoDaysAgo = getRelativeDateISO(-2);
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     activeModuleId: 'water_beverages',
     shopProfile: {
       shopName: 'KUNDU ENTERPRISE',
       tagline: 'PURE WATER, HEALTHY LIFE',
       phone: '9609457208',
-      address: 'Polsonda / Berhampur | Murshidabad',
+      address: 'Godhanpara, Near Canara Bank,\nMurshidabad - 742308',
       billPrefix: 'KE',
       upiId: 'kunduenterprise@upi',
     },

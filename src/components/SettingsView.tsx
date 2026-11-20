@@ -226,11 +226,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Shop Address
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
                   value={shopDraft.address}
                   onChange={(e) => setShopDraft({ ...shopDraft, address: e.target.value })}
-                  className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-300 text-sm text-slate-900"
+                  placeholder={'Godhanpara, Near Canara Bank,\nMurshidabad - 742308'}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 leading-snug resize-none"
                 />
               </div>
 

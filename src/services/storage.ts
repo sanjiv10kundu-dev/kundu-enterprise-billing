@@ -30,27 +30,35 @@ class LocalStorageRepository implements DataRepository {
         return seed;
       }
       const fallback = createInitialSeedState();
-      const isLegacyV1 = (parsed.schemaVersion ?? 1) < 2;
-      const mergedShop = isLegacyV1
-        ? {
-            ...fallback.shopProfile,
-            ...(parsed.shopProfile ?? {}),
-            shopName:
-              parsed.shopProfile?.shopName === 'Kundu Enterprise' || !parsed.shopProfile?.shopName
-                ? fallback.shopProfile.shopName
-                : parsed.shopProfile.shopName,
-            tagline: parsed.shopProfile?.tagline || fallback.shopProfile.tagline,
-            phone:
-              parsed.shopProfile?.phone === '9832012345' || !parsed.shopProfile?.phone
-                ? fallback.shopProfile.phone
-                : parsed.shopProfile.phone,
-            address:
-              parsed.shopProfile?.address === 'Station Road, Berhampur, Murshidabad, WB' ||
-              !parsed.shopProfile?.address
-                ? fallback.shopProfile.address
-                : parsed.shopProfile.address,
-          }
-        : { ...fallback.shopProfile, ...(parsed.shopProfile ?? {}) };
+      const version = parsed.schemaVersion ?? 1;
+      const isLegacyV1 = version < 2;
+      const isLegacyV2 = version < 3;
+      const legacyAddresses = new Set([
+        '',
+        'Station Road, Berhampur, Murshidabad, WB',
+        'Polsonda / Berhampur | Murshidabad',
+      ]);
+      const currentAddr = parsed.shopProfile?.address?.trim() ?? '';
+
+      const mergedShop = {
+        ...fallback.shopProfile,
+        ...(parsed.shopProfile ?? {}),
+        shopName:
+          isLegacyV1 &&
+          (parsed.shopProfile?.shopName === 'Kundu Enterprise' || !parsed.shopProfile?.shopName)
+            ? fallback.shopProfile.shopName
+            : parsed.shopProfile?.shopName || fallback.shopProfile.shopName,
+        tagline: parsed.shopProfile?.tagline || fallback.shopProfile.tagline,
+        phone:
+          isLegacyV1 &&
+          (parsed.shopProfile?.phone === '9832012345' || !parsed.shopProfile?.phone)
+            ? fallback.shopProfile.phone
+            : parsed.shopProfile?.phone ?? fallback.shopProfile.phone,
+        address:
+          isLegacyV2 && legacyAddresses.has(currentAddr)
+            ? fallback.shopProfile.address
+            : parsed.shopProfile?.address ?? fallback.shopProfile.address,
+      };
 
       const mergedSuppliers = (
         parsed.suppliers.length > 0 ? parsed.suppliers : fallback.suppliers
@@ -61,7 +69,7 @@ class LocalStorageRepository implements DataRepository {
       );
 
       return {
-        schemaVersion: 2,
+        schemaVersion: 3,
         activeModuleId: parsed.activeModuleId ?? 'water_beverages',
         shopProfile: mergedShop,
         suppliers: mergedSuppliers,

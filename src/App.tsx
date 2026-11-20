@@ -553,21 +553,32 @@ export default function App() {
                 <p className="text-xs sm:text-sm font-bold tracking-wide text-orange-300 mt-0.5 truncate">
                   {state.shopProfile.tagline || 'PURE WATER, HEALTHY LIFE'}
                 </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-sky-100">
+                <div className="mt-1.5 space-y-1 text-xs text-sky-100">
                   {state.shopProfile.phone && (
-                    <a
-                      href={`tel:+91${state.shopProfile.phone}`}
-                      className="inline-flex items-center gap-1 font-mono font-bold text-white hover:text-orange-200 transition-colors"
-                    >
-                      <Phone className="w-3.5 h-3.5 text-orange-300 shrink-0" />
-                      <span>{state.shopProfile.phone}</span>
-                    </a>
+                    <div>
+                      <a
+                        href={`tel:+91${state.shopProfile.phone}`}
+                        className="inline-flex items-center gap-1 font-mono font-bold text-white hover:text-orange-200 transition-colors"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-orange-300 shrink-0" />
+                        <span>{state.shopProfile.phone}</span>
+                      </a>
+                    </div>
                   )}
                   {state.shopProfile.address && (
-                    <>
-                      <span aria-hidden="true" className="text-sky-300">·</span>
-                      <span className="truncate">{state.shopProfile.address}</span>
-                    </>
+                    <div className="leading-snug text-sky-100 break-words whitespace-normal">
+                      {(() => {
+                        const raw = state.shopProfile.address.trim();
+                        const lines = raw.includes('\n')
+                          ? raw.split('\n').map((l) => l.trim()).filter(Boolean)
+                          : /,\s*(?=Murshidabad)/i.test(raw)
+                          ? raw.replace(/,\s*(?=Murshidabad)/i, ',\n').split('\n')
+                          : [raw];
+                        return lines.map((line, idx) => (
+                          <div key={idx}>{line}</div>
+                        ));
+                      })()}
+                    </div>
                   )}
                 </div>
               </div>
