@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  Calculator,
   CheckCircle2,
   MapPin,
   PackagePlus,
@@ -9,7 +8,13 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { CompanyPurchase, PaymentMode, Product, PurchaseLineItem, Supplier } from '../types';
-import { formatDisplayDate, formatINR, formatUnitQty, getTodayISO } from '../utils/format';
+import {
+  formatDisplayDate,
+  formatINR,
+  formatQuantityWithPieces,
+  getTodayISO,
+  isCaseUnit,
+} from '../utils/format';
 
 interface PurchaseViewProps {
   suppliers: Supplier[];
@@ -45,8 +50,6 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   const [invoiceNo, setInvoiceNo] = useState<string>('');
   const [unitQuantities, setUnitQuantities] = useState<Record<string, number>>({});
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
-  const [boxCalcOpen, setBoxCalcOpen] = useState<Record<string, boolean>>({});
-  const [boxValues, setBoxValues] = useState<Record<string, { boxes: string; perBox: string }>>({});
   const [amountPaidInput, setAmountPaidInput] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode | 'Bank Transfer'>('UPI');
   const [note, setNote] = useState<string>('');
@@ -105,6 +108,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           productName: p.name,
           unitLabel: p.unitLabel,
           unitPlural: p.unitPlural,
+          piecesPerCase: p.piecesPerCase,
           quantity: qty,
           purchaseRate: rate,
           subtotal: Math.round(qty * rate * 100) / 100,
@@ -124,35 +128,15 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
     setSelectedSupplierId(supId);
     setUnitQuantities({});
     setRateInputs({});
-    setBoxCalcOpen({});
-    setBoxValues({});
     setAmountPaidInput('');
     setError('');
-  };
-
-  const applyBoxCalculator = (prod: Product, nextBoxes: string, nextPerBox: string) => {
-    setBoxValues((prev) => ({
-      ...prev,
-      [prod.id]: { boxes: nextBoxes, perBox: nextPerBox },
-    }));
-    const b = Math.max(0, parseInt(nextBoxes, 10) || 0);
-    const pb = Math.max(0, parseInt(nextPerBox, 10) || 0);
-    const totalUnits = b * pb;
-    setUnitQuantities((prev) => {
-      if (totalUnits <= 0) {
-        const copy = { ...prev };
-        delete copy[prod.id];
-        return copy;
-      }
-      return { ...prev, [prod.id]: totalUnits };
-    });
   };
 
   const handleSubmitPurchase = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplier) return;
     if (purchaseItems.length === 0) {
-      setError('Enter purchased units for at least one product.');
+      setError('Enter purchased Cases, Jars, or Pieces for at least one product.');
       return;
     }
     const cleanInvoice = invoiceNo.trim() || `${selectedSupplier.name.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-4)}`;
@@ -170,8 +154,6 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
     setInvoiceNo('');
     setUnitQuantities({});
     setRateInputs({});
-    setBoxCalcOpen({});
-    setBoxValues({});
     setAmountPaidInput('');
     setNote('');
     setError('');
@@ -275,7 +257,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               Log Stock Purchase — {selectedSupplier?.name}
             </h3>
             <p className="text-xs text-slate-600 mt-0.5">
-              Enter exact units purchased (or use the Box × Units helper) to auto-update stock in hand.
+              Enter Cases, Jars, or Pieces purchased directly to auto-update stock in hand.
             </p>
           </div>
 
@@ -312,11 +294,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                 const qty = unitQuantities[prod.id] ?? 0;
                 const rate = getPurchaseRate(prod);
                 const subtotal = Math.round(qty * rate * 100) / 100;
-                const isCalcOpen = Boolean(boxCalcOpen[prod.id]);
-                const boxState = boxValues[prod.id] ?? {
-                  boxes: '',
-                  perBox: String(prod.defaultUnitsPerBox || 12),
-                };
+                const isCase = isCaseUnit(prod.unitLabel, prod.piecesPerCase);
 
                 return (
                   <div
@@ -325,63 +303,36 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <div className="text-sm font-bold text-slate-900">{prod.name}</div>
+                        <div className="text-sm font-bold text-slate-900">
+                          {prod.name}
+                          {isCase && (
+                            <span className="ml-2 text-xs font-semibold text-sky-800">
+                              ({prod.piecesPerCase} Pcs/Case)
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500 tabular-nums">
-                          In stock: {prod.stockUnits} {prod.unitPlural} · Unit: {prod.unitLabel}
+                          In stock:{' '}
+                          {formatQuantityWithPieces(
+                            prod.stockUnits,
+                            prod.unitLabel,
+                            prod.unitPlural,
+                            prod.piecesPerCase
+                          )}{' '}
+                          · Unit: {prod.unitLabel}
                         </div>
                       </div>
-
-                      {prod.defaultUnitsPerBox > 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBoxCalcOpen((prev) => ({ ...prev, [prod.id]: !prev[prod.id] }))
-                          }
-                          className={`min-h-[34px] px-2.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 border transition-colors ${
-                            isCalcOpen
-                              ? 'bg-sky-700 text-white border-sky-700'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          <Calculator className="w-3.5 h-3.5" />
-                          <span>Box Helper</span>
-                        </button>
+                      {qty > 0 && isCase && (
+                        <div className="text-xs font-mono font-bold text-sky-900 tabular-nums">
+                          {formatQuantityWithPieces(
+                            qty,
+                            prod.unitLabel,
+                            prod.unitPlural,
+                            prod.piecesPerCase
+                          )}
+                        </div>
                       )}
                     </div>
-
-                    {isCalcOpen && (
-                      <div className="rounded-xl bg-sky-50 border border-sky-200 p-3 flex flex-wrap items-center gap-2 text-xs">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="0"
-                          placeholder="Boxes"
-                          value={boxState.boxes}
-                          onChange={(e) =>
-                            applyBoxCalculator(prod, e.target.value, boxState.perBox)
-                          }
-                          className="w-20 min-h-[38px] px-2.5 rounded-lg border border-sky-300 bg-white font-mono font-bold text-slate-900 tabular-nums"
-                        />
-                        <span className="font-semibold text-sky-900">Boxes ×</span>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          placeholder="Units/Box"
-                          value={boxState.perBox}
-                          onChange={(e) =>
-                            applyBoxCalculator(prod, boxState.boxes, e.target.value)
-                          }
-                          className="w-20 min-h-[38px] px-2.5 rounded-lg border border-sky-300 bg-white font-mono font-bold text-slate-900 tabular-nums"
-                        />
-                        <span className="font-semibold text-sky-900">
-                          {prod.unitPlural}/Box ={' '}
-                          <strong className="font-mono text-sky-950 tabular-nums">
-                            {qty} {prod.unitPlural}
-                          </strong>
-                        </span>
-                      </div>
-                    )}
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 items-end">
                       <div>
@@ -612,7 +563,12 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                                     isLow ? 'text-amber-700' : 'text-slate-900'
                                   }`}
                                 >
-                                  {formatUnitQty(prod.stockUnits, prod.unitLabel, prod.unitPlural)}
+                                  {formatQuantityWithPieces(
+                                    prod.stockUnits,
+                                    prod.unitLabel,
+                                    prod.unitPlural,
+                                    prod.piecesPerCase
+                                  )}
                                 </div>
                                 <div className="text-[11px] flex items-center justify-end gap-1">
                                   {isLow ? (
@@ -683,8 +639,14 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                         {pur.items.map((item, i) => (
                           <div key={`${pur.id}_${i}`}>
                             {item.productName}:{' '}
-                            {formatUnitQty(item.quantity, item.unitLabel, item.unitPlural)} ×{' '}
-                            {formatINR(item.purchaseRate)} = {formatINR(item.subtotal)}
+                            {formatQuantityWithPieces(
+                              item.quantity,
+                              item.unitLabel,
+                              item.unitPlural,
+                              item.piecesPerCase
+                            )}{' '}
+                            × {formatINR(item.purchaseRate)}/{item.unitLabel} ={' '}
+                            {formatINR(item.subtotal)}
                           </div>
                         ))}
                       </div>

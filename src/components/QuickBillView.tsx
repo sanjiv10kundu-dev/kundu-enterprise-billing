@@ -20,8 +20,12 @@ import {
   ShopProfile,
   Supplier,
 } from '../types';
-import { formatINR, formatUnitQty, getTodayISO } from '../utils/format';
-import { buildSalesReceiptText, buildWhatsAppUrl } from '../utils/whatsapp';
+import {
+  formatINR,
+  formatQuantityWithPieces,
+  getTodayISO,
+  isCaseUnit,
+} from '../utils/format';
 
 interface QuickBillViewProps {
   customers: Customer[];
@@ -46,7 +50,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
   customers,
   suppliers,
   products,
-  shopProfile,
+  shopProfile: _shopProfile,
   selectedCustomerId,
   onSelectCustomer,
   onSaveSale,
@@ -140,6 +144,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
           productName: p.name,
           unitLabel: p.unitLabel,
           unitPlural: p.unitPlural,
+          piecesPerCase: p.piecesPerCase,
           quantity: qty,
           unitRate,
           subtotal: Math.round(qty * unitRate * 100) / 100,
@@ -157,18 +162,31 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
     [lineItems]
   );
 
+  const totalPiecesCount = useMemo(
+    () =>
+      lineItems.reduce(
+        (sum, item) =>
+          sum +
+          (isCaseUnit(item.unitLabel, item.piecesPerCase)
+            ? item.quantity * (item.piecesPerCase ?? 1)
+            : item.quantity),
+        0
+      ),
+    [lineItems]
+  );
+
   const previousDue = selectedCustomer?.dueBalance ?? 0;
   const grandPayable = Math.round((todayTotal + previousDue) * 100) / 100;
   const amountPaid = amountPaidInput.trim() === '' ? 0 : Math.max(0, Number(amountPaidInput) || 0);
   const netDueAfter = Math.round((grandPayable - amountPaid) * 100) / 100;
 
-  const handleSave = (dispatchWhatsApp: boolean) => {
+  const handleSave = (openReceiptModal: boolean) => {
     if (!selectedCustomer) {
       setFormError('Select a customer first to create a bill.');
       return;
     }
     if (lineItems.length === 0 && amountPaid === 0) {
-      setFormError('Enter at least 1 unit delivered or an amount paid today.');
+      setFormError('Enter at least 1 Case / Jar / Piece delivered or an amount paid today.');
       return;
     }
 
@@ -181,19 +199,9 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
       note: note.trim(),
     });
 
-    if (dispatchWhatsApp) {
-      const receiptText = buildSalesReceiptText(savedTxn, shopProfile, selectedCustomer);
-      const waUrl = buildWhatsAppUrl(savedTxn.customerPhone, receiptText);
-      const anchor = document.createElement('a');
-      anchor.href = waUrl;
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+    if (openReceiptModal) {
+      onOpenReceipt(savedTxn);
     }
-
-    onOpenReceipt(savedTxn);
     resetForm();
   };
 
@@ -311,8 +319,8 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
           <div className="rounded-2xl bg-white border border-slate-200 p-10 text-center">
             <h2 className="text-xl font-bold text-slate-900">Ready for Quick Billing</h2>
             <p className="text-sm text-slate-600 mt-2 max-w-md mx-auto">
-              Choose a customer from the list on the left to enter exact per-unit quantities for
-              Desertmina and Tata products and dispatch their WhatsApp receipt.
+              Choose a customer from the list on the left to enter Case / Jar quantities for
+              Desertmina and Tata products and share a high-resolution JPG receipt on WhatsApp.
             </p>
           </div>
         ) : (
@@ -366,11 +374,11 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                   <div>
                     <h2 className="text-base font-extrabold text-[#0B2C6F]">{supplier.name}</h2>
                     <p className="text-xs text-slate-600">
-                      {supplier.address} · Unit-wise billing
+                      {supplier.address} · Case &amp; Jar billing
                     </p>
                   </div>
                   <div className="text-xs font-bold text-orange-700 tabular-nums">
-                    {items.reduce((s, p) => s + (quantities[p.id] ?? 0), 0)} units selected
+                    {items.reduce((s, p) => s + (quantities[p.id] ?? 0), 0)} selected
                   </div>
                 </div>
 
@@ -382,6 +390,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                       typeof selectedCustomer.customRates[product.id] === 'number';
                     const isLowStock = product.stockUnits <= product.lowStockThreshold;
                     const lineSubtotal = Math.round(qty * effectiveRate * 100) / 100;
+                    const isCase = isCaseUnit(product.unitLabel, product.piecesPerCase);
 
                     return (
                       <div
@@ -393,12 +402,14 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           {/* Product info & rate */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between sm:justify-start gap-2">
+                            <div className="flex flex-wrap items-baseline justify-between sm:justify-start gap-2">
                               <h3 className="text-sm sm:text-base font-bold text-slate-900">
                                 {product.name}
                               </h3>
-                              <span className="text-xs font-medium text-slate-500">
-                                Per {product.unitLabel}
+                              <span className="text-xs font-semibold text-sky-800">
+                                {isCase
+                                  ? `Per Case (${product.piecesPerCase} Pcs/Case)`
+                                  : `Per ${product.unitLabel}`}
                               </span>
                             </div>
 
@@ -413,7 +424,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                                   inputMode="decimal"
                                   step="0.5"
                                   min="0"
-                                  aria-label={`Unit rate for ${product.brandName} ${product.name}`}
+                                  aria-label={`Rate per ${product.unitLabel} for ${product.brandName} ${product.name}`}
                                   value={
                                     rateOverrides[product.id] !== undefined
                                       ? rateOverrides[product.id]
@@ -425,7 +436,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                                       [product.id]: e.target.value,
                                     }))
                                   }
-                                  className="w-16 px-1.5 py-0.5 rounded-md border border-slate-200 bg-white font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-sky-600 focus:outline-none"
+                                  className="w-18 px-1.5 py-0.5 rounded-md border border-slate-200 bg-white font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-sky-600 focus:outline-none"
                                 />
                                 /{product.unitLabel}
                               </span>
@@ -439,32 +450,29 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                                 }`}
                               >
                                 {isLowStock && <AlertTriangle className="w-3.5 h-3.5" />}
-                                Stock: {product.stockUnits} {product.unitPlural}
+                                In stock:{' '}
+                                {formatQuantityWithPieces(
+                                  product.stockUnits,
+                                  product.unitLabel,
+                                  product.unitPlural,
+                                  product.piecesPerCase
+                                )}
                               </span>
                             </div>
                           </div>
 
-                          {/* Touch-friendly stepper + direct unit entry */}
+                          {/* Touch-friendly stepper + direct Case / Jar / Piece entry */}
                           <div className="flex items-center justify-between sm:justify-end gap-2">
-                            {product.defaultUnitsPerBox > 1 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setProductQty(product.id, qty + product.defaultUnitsPerBox)
-                                }
-                                title={`Add 1 box (${product.defaultUnitsPerBox} ${product.unitPlural})`}
-                                className="min-h-[44px] px-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono font-semibold text-slate-700 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-800 active:scale-95 transition-all whitespace-nowrap tabular-nums"
-                              >
-                                +{product.defaultUnitsPerBox}
-                              </button>
-                            )}
+                            <span className="sm:hidden text-xs font-semibold text-slate-500">
+                              Qty ({product.unitPlural})
+                            </span>
 
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => setProductQty(product.id, qty - 1)}
                                 disabled={qty === 0}
-                                aria-label={`Decrease ${product.name} units`}
+                                aria-label={`Decrease ${product.name} ${product.unitPlural}`}
                                 className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 disabled:opacity-40 active:scale-95 transition-all"
                               >
                                 <Minus className="w-4 h-4" />
@@ -486,7 +494,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setProductQty(product.id, qty + 1)}
-                                aria-label={`Increase ${product.name} units`}
+                                aria-label={`Increase ${product.name} ${product.unitPlural}`}
                                 className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-sky-700 text-white hover:bg-sky-800 active:scale-95 transition-all"
                               >
                                 <Plus className="w-4 h-4" />
@@ -497,9 +505,14 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
 
                         {qty > 0 && (
                           <div className="mt-2.5 pt-2 border-t border-sky-100 flex items-center justify-between text-xs sm:text-sm">
-                            <span className="text-slate-600 tabular-nums">
-                              {formatUnitQty(qty, product.unitLabel, product.unitPlural)} ×{' '}
-                              {formatINR(effectiveRate)}
+                            <span className="text-slate-700 font-medium tabular-nums">
+                              {formatQuantityWithPieces(
+                                qty,
+                                product.unitLabel,
+                                product.unitPlural,
+                                product.piecesPerCase
+                              )}{' '}
+                              × {formatINR(effectiveRate)}/{product.unitLabel}
                             </span>
                             <span className="font-mono font-bold text-sky-900 tabular-nums">
                               = {formatINR(lineSubtotal)}
@@ -540,7 +553,10 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
               {/* Calculation rows */}
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Today&apos;s Total ({totalUnitsCount} units)</span>
+                  <span>
+                    Today&apos;s Total ({totalUnitsCount} items
+                    {totalPiecesCount > totalUnitsCount ? ` · ${totalPiecesCount} Pcs` : ''})
+                  </span>
                   <span className="font-mono text-base font-bold text-slate-900 tabular-nums">
                     {formatINR(todayTotal)}
                   </span>
@@ -673,7 +689,7 @@ export const QuickBillView: React.FC<QuickBillViewProps> = ({
                   className="sm:col-span-2 min-h-[52px] px-5 rounded-xl bg-emerald-600 text-white text-sm sm:text-base font-bold hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-sm"
                 >
                   <MessageCircle className="w-5 h-5 shrink-0" />
-                  <span>Save &amp; Send on WhatsApp</span>
+                  <span>Save &amp; Share Bill (JPG / WhatsApp)</span>
                 </button>
                 <button
                   type="button"

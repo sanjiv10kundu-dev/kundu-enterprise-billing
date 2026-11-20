@@ -4,8 +4,9 @@ import { Customer, Product, SalesTransaction, Supplier } from '../types';
 import {
   formatDisplayDate,
   formatINR,
-  formatUnitQty,
+  formatQuantityWithPieces,
   getTodayISO,
+  isCaseUnit,
   isWithinLastDays,
 } from '../utils/format';
 
@@ -51,7 +52,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     const todayCollected = todayCash + todayUpi;
     const todayNewCredit = Math.max(0, todaySalesTotal - todayCollected);
     const totalMarketDue = customers.reduce((s, c) => s + Math.max(0, c.dueBalance), 0);
-    const totalStockUnits = products.reduce((s, p) => s + p.stockUnits, 0);
+    const totalStockCases = products
+      .filter((p) => isCaseUnit(p.unitLabel, p.piecesPerCase))
+      .reduce((s, p) => s + p.stockUnits, 0);
+    const totalStockCasePieces = products
+      .filter((p) => isCaseUnit(p.unitLabel, p.piecesPerCase))
+      .reduce((s, p) => s + p.stockUnits * p.piecesPerCase, 0);
+    const totalStockJarsPieces = products
+      .filter((p) => !isCaseUnit(p.unitLabel, p.piecesPerCase))
+      .reduce((s, p) => s + p.stockUnits, 0);
     const lowStockCount = products.filter((p) => p.stockUnits <= p.lowStockThreshold).length;
 
     return {
@@ -62,7 +71,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       todayCollected,
       todayNewCredit,
       totalMarketDue,
-      totalStockUnits,
+      totalStockCases,
+      totalStockCasePieces,
+      totalStockJarsPieces,
       lowStockCount,
     };
   }, [transactions, customers, products, todayISO]);
@@ -86,11 +97,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [transactions, dateFilter, customDate, brandFilter, customerFilter, typeFilter, todayISO]);
 
-  // Filtered Product Unit Breakdown
+  // Filtered Product Case/Unit Breakdown
   const productBreakdown = useMemo(() => {
     const map: Record<
       string,
-      { brandName: string; productName: string; unitLabel: string; unitPlural: string; units: number; revenue: number }
+      {
+        brandName: string;
+        productName: string;
+        unitLabel: string;
+        unitPlural: string;
+        piecesPerCase?: number;
+        units: number;
+        revenue: number;
+      }
     > = {};
     filteredTransactions.forEach((txn) => {
       txn.items.forEach((item) => {
@@ -101,6 +120,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             productName: item.productName,
             unitLabel: item.unitLabel,
             unitPlural: item.unitPlural,
+            piecesPerCase: item.piecesPerCase,
             units: 0,
             revenue: 0,
           };
@@ -153,18 +173,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
 
         <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5">
-          <div className="text-xs font-semibold text-slate-500">Current Unit Stock</div>
-          <div className="mt-1.5 font-mono text-2xl font-extrabold text-slate-900 tabular-nums">
-            {kpis.totalStockUnits.toLocaleString('en-IN')}
+          <div className="text-xs font-semibold text-slate-500">Current Stock</div>
+          <div className="mt-1.5 font-mono text-lg sm:text-xl font-extrabold text-slate-900 tabular-nums">
+            {kpis.totalStockCases} Cases{' '}
+            <span className="text-xs font-bold text-slate-500">
+              ({kpis.totalStockCasePieces} Pcs)
+            </span>
           </div>
           <div className="mt-1 text-xs tabular-nums">
             {kpis.lowStockCount > 0 ? (
               <span className="text-amber-700 font-semibold inline-flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                {kpis.lowStockCount} low stock items
+                {kpis.lowStockCount} low · {kpis.totalStockJarsPieces} Jars/Pcs
               </span>
             ) : (
-              <span className="text-emerald-700 font-medium">All items stocked</span>
+              <span className="text-emerald-700 font-medium">
+                + {kpis.totalStockJarsPieces} Jars &amp; Pcs in stock
+              </span>
             )}
           </div>
         </div>
@@ -348,8 +373,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           <div key={`${txn.id}_${idx}`} className="flex items-center justify-between gap-2">
                             <span className="truncate">
                               {item.brandName} {item.productName}:{' '}
-                              {formatUnitQty(item.quantity, item.unitLabel, item.unitPlural)} ×{' '}
-                              {formatINR(item.unitRate)}
+                              {formatQuantityWithPieces(
+                                item.quantity,
+                                item.unitLabel,
+                                item.unitPlural,
+                                item.piecesPerCase
+                              )}{' '}
+                              × {formatINR(item.unitRate)}/{item.unitLabel}
                             </span>
                             <span className="font-mono font-semibold text-slate-900 shrink-0">
                               {formatINR(item.subtotal)}
@@ -409,7 +439,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       {row.brandName} {row.productName}
                     </div>
                     <div className="text-xs text-slate-500 tabular-nums">
-                      {formatUnitQty(row.units, row.unitLabel, row.unitPlural)} sold
+                      {formatQuantityWithPieces(
+                        row.units,
+                        row.unitLabel,
+                        row.unitPlural,
+                        row.piecesPerCase
+                      )}{' '}
+                      sold
                     </div>
                   </div>
                   <div className="font-mono text-sm font-bold text-sky-900 tabular-nums shrink-0">

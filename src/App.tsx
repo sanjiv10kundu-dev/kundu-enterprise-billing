@@ -455,23 +455,23 @@ export default function App() {
   const pageMeta: Record<NavTab, { title: string; subtitle: string }> = {
     'quick-bill': {
       title: 'Quick Bill',
-      subtitle: `${activeModule.name} · Unit-wise delivery & WhatsApp dispatch`,
+      subtitle: `${activeModule.name} · Case & Jar billing with HD JPG WhatsApp bills`,
     },
     customers: {
       title: 'Customers & Khata',
-      subtitle: `${activeModule.name} · Pending dues, payments & custom unit rates`,
+      subtitle: `${activeModule.name} · Pending dues, payments & custom Case rates`,
     },
     purchase: {
       title: 'Company Purchase & Stock',
-      subtitle: `${activeModule.name} · Desertmina & Tata stock entries`,
+      subtitle: `${activeModule.name} · Desertmina & Tata Case/Jar stock entries`,
     },
     reports: {
       title: 'Reports & History',
-      subtitle: `${activeModule.name} · Daily sales, collections & unit volume`,
+      subtitle: `${activeModule.name} · Daily sales, collections & Case/piece volume`,
     },
     settings: {
       title: 'Settings',
-      subtitle: `${activeModule.name} · Suppliers, per-unit rates & data backup`,
+      subtitle: `${activeModule.name} · Suppliers, Case rates, Pcs/Case & backup`,
     },
   };
 

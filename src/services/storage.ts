@@ -1,5 +1,6 @@
-import { createInitialSeedState } from '../data/seedData';
+import { CASE_PRODUCT_DEFAULTS, createInitialSeedState } from '../data/seedData';
 import { AppDataState, Customer, Product, SalesTransaction, CompanyPurchase } from '../types';
+import { formatQuantityWithPieces } from '../utils/format';
 
 const STORAGE_KEY = 'kundu_enterprise_pwa_v1';
 
@@ -25,7 +26,24 @@ function getSafeStorage(): Storage | null {
   }
 }
 
-function normalizeCustomer(c: Partial<Customer>): Customer {
+function normalizeCustomer(c: Partial<Customer>, upgradeLegacyCaseRates = false): Customer {
+  const rawRates =
+    c.customRates && typeof c.customRates === 'object' && !Array.isArray(c.customRates)
+      ? c.customRates
+      : {};
+
+  const customRates: Record<string, number> = {};
+  Object.entries(rawRates).forEach(([pid, rate]) => {
+    const num = Number(rate);
+    if (!Number.isFinite(num) || num < 0) return;
+    const caseCfg = CASE_PRODUCT_DEFAULTS[pid];
+    if (upgradeLegacyCaseRates && caseCfg && num > 0 && num < 60) {
+      customRates[pid] = Math.round(num * caseCfg.piecesPerCase * 100) / 100;
+    } else {
+      customRates[pid] = num;
+    }
+  });
+
   return {
     id: typeof c.id === 'string' && c.id ? c.id : `cust_${Date.now()}`,
     name: typeof c.name === 'string' ? c.name : 'Unnamed Customer',
@@ -33,37 +51,92 @@ function normalizeCustomer(c: Partial<Customer>): Customer {
     shopAddress: typeof c.shopAddress === 'string' ? c.shopAddress : '',
     customerType: c.customerType === 'Regular' ? 'Regular' : 'Retailer',
     dueBalance: typeof c.dueBalance === 'number' && Number.isFinite(c.dueBalance) ? c.dueBalance : 0,
-    customRates:
-      c.customRates && typeof c.customRates === 'object' && !Array.isArray(c.customRates)
-        ? c.customRates
-        : {},
+    customRates,
     createdAt: typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString(),
     isSample: Boolean(c.isSample),
   };
 }
 
-function normalizeProduct(p: Partial<Product>): Product {
+function normalizeProduct(
+  p: Partial<Product> & { defaultUnitsPerBox?: number },
+  upgradeToCaseSchema = false
+): Product {
+  const id = typeof p.id === 'string' && p.id ? p.id : `prod_${Date.now()}`;
+  const caseCfg = CASE_PRODUCT_DEFAULTS[id];
+  const rawUnit = p.unitLabel ?? 'Case';
+  const rawBuy = Number.isFinite(Number(p.defaultPurchaseRate))
+    ? Number(p.defaultPurchaseRate)
+    : 0;
+  const rawSell = Number.isFinite(Number(p.defaultSellingRate))
+    ? Number(p.defaultSellingRate)
+    : 0;
+  const rawStock = Number.isFinite(Number(p.stockUnits))
+    ? Math.max(0, Number(p.stockUnits))
+    : 0;
+  const rawLow = Number.isFinite(Number(p.lowStockThreshold))
+    ? Math.max(0, Number(p.lowStockThreshold))
+    : 5;
+
+  if (upgradeToCaseSchema && caseCfg && rawUnit !== 'Case') {
+    const pcs = caseCfg.piecesPerCase;
+    return {
+      id,
+      moduleId: p.moduleId ?? 'water_beverages',
+      supplierId: typeof p.supplierId === 'string' ? p.supplierId : 'sup_desertmina',
+      brandName: typeof p.brandName === 'string' ? p.brandName : 'Desertmina',
+      name: typeof p.name === 'string' ? p.name : 'Water Unit',
+      unitLabel: 'Case',
+      unitPlural: 'Cases',
+      piecesPerCase: pcs,
+      defaultPurchaseRate:
+        rawBuy > 0 && rawBuy < 50
+          ? Math.round(rawBuy * pcs * 100) / 100
+          : rawBuy || caseCfg.defaultPurchaseRate,
+      defaultSellingRate:
+        rawSell > 0 && rawSell < 60
+          ? Math.round(rawSell * pcs * 100) / 100
+          : rawSell || caseCfg.defaultSellingRate,
+      stockUnits: Math.max(0, Math.round(rawStock / pcs)),
+      lowStockThreshold: Math.max(1, Math.round(rawLow / pcs)) || caseCfg.lowStockThreshold,
+    };
+  }
+
+  const unitLabel = rawUnit;
+  const isCase = unitLabel === 'Case';
+  const fallbackPcs = isCase
+    ? caseCfg?.piecesPerCase ??
+      (Number.isFinite(Number(p.defaultUnitsPerBox)) && Number(p.defaultUnitsPerBox) > 1
+        ? Number(p.defaultUnitsPerBox)
+        : 12)
+    : 1;
+
+  const piecesPerCase =
+    isCase && Number.isFinite(Number(p.piecesPerCase)) && Number(p.piecesPerCase) > 1
+      ? Math.max(2, Math.floor(Number(p.piecesPerCase)))
+      : fallbackPcs;
+
   return {
-    id: typeof p.id === 'string' && p.id ? p.id : `prod_${Date.now()}`,
+    id,
     moduleId: p.moduleId ?? 'water_beverages',
     supplierId: typeof p.supplierId === 'string' ? p.supplierId : 'sup_desertmina',
     brandName: typeof p.brandName === 'string' ? p.brandName : 'Desertmina',
     name: typeof p.name === 'string' ? p.name : 'Water Unit',
-    unitLabel: p.unitLabel ?? 'Bottle',
-    unitPlural: typeof p.unitPlural === 'string' ? p.unitPlural : 'Bottles',
-    defaultPurchaseRate: Number.isFinite(Number(p.defaultPurchaseRate))
-      ? Number(p.defaultPurchaseRate)
-      : 0,
-    defaultSellingRate: Number.isFinite(Number(p.defaultSellingRate))
-      ? Number(p.defaultSellingRate)
-      : 0,
-    stockUnits: Number.isFinite(Number(p.stockUnits)) ? Math.max(0, Number(p.stockUnits)) : 0,
-    lowStockThreshold: Number.isFinite(Number(p.lowStockThreshold))
-      ? Math.max(0, Number(p.lowStockThreshold))
-      : 10,
-    defaultUnitsPerBox: Number.isFinite(Number(p.defaultUnitsPerBox))
-      ? Math.max(1, Number(p.defaultUnitsPerBox))
-      : 1,
+    unitLabel,
+    unitPlural:
+      typeof p.unitPlural === 'string'
+        ? p.unitPlural
+        : isCase
+        ? 'Cases'
+        : unitLabel === 'Jar'
+        ? 'Jars'
+        : unitLabel === 'Piece'
+        ? 'Pieces'
+        : `${unitLabel}s`,
+    piecesPerCase,
+    defaultPurchaseRate: rawBuy,
+    defaultSellingRate: rawSell,
+    stockUnits: rawStock,
+    lowStockThreshold: rawLow,
   };
 }
 
@@ -78,7 +151,15 @@ function normalizeTransaction(t: Partial<SalesTransaction>): SalesTransaction {
     customerId: typeof t.customerId === 'string' ? t.customerId : '',
     customerName: typeof t.customerName === 'string' ? t.customerName : 'Customer',
     customerPhone: typeof t.customerPhone === 'string' ? t.customerPhone : '',
-    items: Array.isArray(t.items) ? t.items : [],
+    items: Array.isArray(t.items)
+      ? t.items.map((item) => ({
+          ...item,
+          piecesPerCase:
+            item.unitLabel === 'Case'
+              ? item.piecesPerCase ?? CASE_PRODUCT_DEFAULTS[item.productId]?.piecesPerCase ?? 12
+              : item.piecesPerCase ?? 1,
+        }))
+      : [],
     totalAmount: Number.isFinite(Number(t.totalAmount)) ? Number(t.totalAmount) : 0,
     previousDue: Number.isFinite(Number(t.previousDue)) ? Number(t.previousDue) : 0,
     amountPaid: Number.isFinite(Number(t.amountPaid)) ? Number(t.amountPaid) : 0,
@@ -98,7 +179,15 @@ function normalizePurchase(pur: Partial<CompanyPurchase>): CompanyPurchase {
     invoiceNo: typeof pur.invoiceNo === 'string' ? pur.invoiceNo : 'INV',
     date: typeof pur.date === 'string' ? pur.date : new Date().toISOString().slice(0, 10),
     createdAt: typeof pur.createdAt === 'string' ? pur.createdAt : new Date().toISOString(),
-    items: Array.isArray(pur.items) ? pur.items : [],
+    items: Array.isArray(pur.items)
+      ? pur.items.map((item) => ({
+          ...item,
+          piecesPerCase:
+            item.unitLabel === 'Case'
+              ? item.piecesPerCase ?? CASE_PRODUCT_DEFAULTS[item.productId]?.piecesPerCase ?? 12
+              : item.piecesPerCase ?? 1,
+        }))
+      : [],
     totalAmount: Number.isFinite(Number(pur.totalAmount)) ? Number(pur.totalAmount) : 0,
     amountPaid: Number.isFinite(Number(pur.amountPaid)) ? Number(pur.amountPaid) : 0,
     paymentMode:
@@ -106,6 +195,97 @@ function normalizePurchase(pur: Partial<CompanyPurchase>): CompanyPurchase {
     balanceDue: Number.isFinite(Number(pur.balanceDue)) ? Number(pur.balanceDue) : 0,
     note: typeof pur.note === 'string' ? pur.note : undefined,
     isSample: Boolean(pur.isSample),
+  };
+}
+
+function migrateState(parsed: Partial<AppDataState>): AppDataState {
+  const fallback = createInitialSeedState();
+  const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 1;
+  const isLegacyV1 = version < 2;
+  const isLegacyV2 = version < 3;
+  const isLegacyV3 = version < 4;
+
+  const legacyAddresses = new Set([
+    '',
+    'Station Road, Berhampur, Murshidabad, WB',
+    'Polsonda / Berhampur | Murshidabad',
+  ]);
+  const currentAddr =
+    typeof parsed.shopProfile?.address === 'string' ? parsed.shopProfile.address.trim() : '';
+  const currentUpi =
+    typeof parsed.shopProfile?.upiId === 'string' ? parsed.shopProfile.upiId.trim() : '';
+
+  const mergedShop = {
+    ...fallback.shopProfile,
+    ...(parsed.shopProfile && typeof parsed.shopProfile === 'object' ? parsed.shopProfile : {}),
+    shopName:
+      isLegacyV1 &&
+      (parsed.shopProfile?.shopName === 'Kundu Enterprise' || !parsed.shopProfile?.shopName)
+        ? fallback.shopProfile.shopName
+        : parsed.shopProfile?.shopName || fallback.shopProfile.shopName,
+    tagline: parsed.shopProfile?.tagline || fallback.shopProfile.tagline,
+    phone:
+      isLegacyV1 &&
+      (parsed.shopProfile?.phone === '9832012345' || !parsed.shopProfile?.phone)
+        ? fallback.shopProfile.phone
+        : parsed.shopProfile?.phone ?? fallback.shopProfile.phone,
+    address:
+      isLegacyV2 && legacyAddresses.has(currentAddr)
+        ? fallback.shopProfile.address
+        : parsed.shopProfile?.address ?? fallback.shopProfile.address,
+    upiId:
+      isLegacyV3 && (!currentUpi || currentUpi === 'kunduenterprise@upi')
+        ? fallback.shopProfile.upiId
+        : currentUpi || fallback.shopProfile.upiId,
+  };
+
+  const mergedSuppliers = (
+    Array.isArray(parsed.suppliers) && parsed.suppliers.length > 0
+      ? parsed.suppliers
+      : fallback.suppliers
+  ).map((sup) =>
+    isLegacyV1 && sup.id === 'sup_desertmina' && !sup.phone
+      ? { ...sup, phone: '9609457208' }
+      : sup
+  );
+
+  // For legacy v3 sample transactions/purchases, refresh sample entries to Case-based format while keeping real user records untouched
+  const rawTransactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+  const sampleTxnById = new Map(fallback.transactions.map((t) => [t.id, t]));
+  const migratedTransactions = rawTransactions.map((t) => {
+    if (isLegacyV3 && t.isSample && typeof t.id === 'string' && sampleTxnById.has(t.id)) {
+      return sampleTxnById.get(t.id)!;
+    }
+    return normalizeTransaction(t);
+  });
+
+  const rawPurchases = Array.isArray(parsed.purchases) ? parsed.purchases : [];
+  const samplePurById = new Map(fallback.purchases.map((p) => [p.id, p]));
+  const migratedPurchases = rawPurchases.map((pur) => {
+    if (isLegacyV3 && pur.isSample && typeof pur.id === 'string' && samplePurById.has(pur.id)) {
+      return samplePurById.get(pur.id)!;
+    }
+    return normalizePurchase(pur);
+  });
+
+  return {
+    schemaVersion: 4,
+    activeModuleId: parsed.activeModuleId ?? 'water_beverages',
+    shopProfile: mergedShop,
+    suppliers: mergedSuppliers,
+    products:
+      Array.isArray(parsed.products) && parsed.products.length > 0
+        ? parsed.products.map((p) => normalizeProduct(p, isLegacyV3))
+        : fallback.products,
+    customers: Array.isArray(parsed.customers)
+      ? parsed.customers.map((c) => normalizeCustomer(c, isLegacyV3))
+      : [],
+    transactions: migratedTransactions,
+    purchases: migratedPurchases,
+    billSequence:
+      typeof parsed.billSequence === 'number' && Number.isFinite(parsed.billSequence)
+        ? parsed.billSequence
+        : 1001,
   };
 }
 
@@ -120,74 +300,17 @@ class LocalStorageRepository implements DataRepository {
         return seed;
       }
       const parsed = JSON.parse(raw) as Partial<AppDataState> | null;
-      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.products) || !Array.isArray(parsed.suppliers)) {
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        !Array.isArray(parsed.products) ||
+        !Array.isArray(parsed.suppliers)
+      ) {
         const seed = createInitialSeedState();
         this.save(seed);
         return seed;
       }
-      const fallback = createInitialSeedState();
-      const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 1;
-      const isLegacyV1 = version < 2;
-      const isLegacyV2 = version < 3;
-      const legacyAddresses = new Set([
-        '',
-        'Station Road, Berhampur, Murshidabad, WB',
-        'Polsonda / Berhampur | Murshidabad',
-      ]);
-      const currentAddr =
-        typeof parsed.shopProfile?.address === 'string' ? parsed.shopProfile.address.trim() : '';
-
-      const mergedShop = {
-        ...fallback.shopProfile,
-        ...(parsed.shopProfile && typeof parsed.shopProfile === 'object' ? parsed.shopProfile : {}),
-        shopName:
-          isLegacyV1 &&
-          (parsed.shopProfile?.shopName === 'Kundu Enterprise' || !parsed.shopProfile?.shopName)
-            ? fallback.shopProfile.shopName
-            : parsed.shopProfile?.shopName || fallback.shopProfile.shopName,
-        tagline: parsed.shopProfile?.tagline || fallback.shopProfile.tagline,
-        phone:
-          isLegacyV1 &&
-          (parsed.shopProfile?.phone === '9832012345' || !parsed.shopProfile?.phone)
-            ? fallback.shopProfile.phone
-            : parsed.shopProfile?.phone ?? fallback.shopProfile.phone,
-        address:
-          isLegacyV2 && legacyAddresses.has(currentAddr)
-            ? fallback.shopProfile.address
-            : parsed.shopProfile?.address ?? fallback.shopProfile.address,
-      };
-
-      const mergedSuppliers = (
-        parsed.suppliers.length > 0 ? parsed.suppliers : fallback.suppliers
-      ).map((sup) =>
-        isLegacyV1 && sup.id === 'sup_desertmina' && !sup.phone
-          ? { ...sup, phone: '9609457208' }
-          : sup
-      );
-
-      return {
-        schemaVersion: 3,
-        activeModuleId: parsed.activeModuleId ?? 'water_beverages',
-        shopProfile: mergedShop,
-        suppliers: mergedSuppliers,
-        products:
-          parsed.products.length > 0
-            ? parsed.products.map((p) => normalizeProduct(p))
-            : fallback.products,
-        customers: Array.isArray(parsed.customers)
-          ? parsed.customers.map((c) => normalizeCustomer(c))
-          : [],
-        transactions: Array.isArray(parsed.transactions)
-          ? parsed.transactions.map((t) => normalizeTransaction(t))
-          : [],
-        purchases: Array.isArray(parsed.purchases)
-          ? parsed.purchases.map((pur) => normalizePurchase(pur))
-          : [],
-        billSequence:
-          typeof parsed.billSequence === 'number' && Number.isFinite(parsed.billSequence)
-            ? parsed.billSequence
-            : 1001,
-      };
+      return migrateState(parsed);
     } catch {
       return createInitialSeedState();
     }
@@ -219,31 +342,7 @@ class LocalStorageRepository implements DataRepository {
     ) {
       throw new Error('Invalid Kundu Enterprise backup file structure.');
     }
-    const fallback = createInitialSeedState();
-    return {
-      schemaVersion: 3,
-      activeModuleId: parsed.activeModuleId ?? 'water_beverages',
-      shopProfile: {
-        ...fallback.shopProfile,
-        ...(parsed.shopProfile && typeof parsed.shopProfile === 'object' ? parsed.shopProfile : {}),
-      },
-      suppliers: parsed.suppliers.length > 0 ? parsed.suppliers : fallback.suppliers,
-      products:
-        parsed.products.length > 0
-          ? parsed.products.map((p) => normalizeProduct(p))
-          : fallback.products,
-      customers: parsed.customers.map((c) => normalizeCustomer(c)),
-      transactions: Array.isArray(parsed.transactions)
-        ? parsed.transactions.map((t) => normalizeTransaction(t))
-        : [],
-      purchases: Array.isArray(parsed.purchases)
-        ? parsed.purchases.map((pur) => normalizePurchase(pur))
-        : [],
-      billSequence:
-        typeof parsed.billSequence === 'number' && Number.isFinite(parsed.billSequence)
-          ? parsed.billSequence
-          : 1001,
-    };
+    return migrateState(parsed);
   }
 }
 
@@ -274,7 +373,15 @@ export function buildTransactionsCsv(state: AppDataState): string {
 
   const rows = (state.transactions ?? []).map((t) => {
     const breakdown = (t.items ?? [])
-      .map((i) => `${i.brandName} ${i.productName}: ${i.quantity} ${i.unitPlural} x ${i.unitRate}`)
+      .map(
+        (i) =>
+          `${i.brandName} ${i.productName}: ${formatQuantityWithPieces(
+            i.quantity,
+            i.unitLabel,
+            i.unitPlural,
+            i.piecesPerCase
+          )} x ${i.unitRate}`
+      )
       .join(' | ');
     return [
       t.billNo,
@@ -307,6 +414,27 @@ export function triggerFileDownload(content: string, filename: string, mimeType:
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
+  } catch {
+    // Gracefully ignore download errors in unsupported environments
+  }
+}
+
+export function triggerBlobDownload(blob: Blob, filename: string): void {
+  try {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }, 1000);
   } catch {
     // Gracefully ignore download errors in unsupported environments
   }

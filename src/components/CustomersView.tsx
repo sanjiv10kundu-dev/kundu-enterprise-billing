@@ -26,11 +26,11 @@ import {
 import {
   formatDisplayDate,
   formatINR,
-  formatUnitQty,
+  formatQuantityWithPieces,
   getTodayISO,
+  isCaseUnit,
   sanitizeIndianPhone,
 } from '../utils/format';
-import { buildSalesReceiptText, buildWhatsAppUrl } from '../utils/whatsapp';
 import { pickPhoneContact } from '../utils/contacts';
 
 interface CustomersViewProps {
@@ -60,7 +60,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   suppliers,
   products,
   transactions,
-  shopProfile,
+  shopProfile: _shopProfile,
   openAddModalOnMount,
   prefillContact,
   onConsumedAddModal,
@@ -229,7 +229,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setShowEditor(false);
   };
 
-  const handleSaveJama = (sendWhatsApp: boolean) => {
+  const handleSaveJama = (openReceiptModal: boolean) => {
     if (!activeCustomer) return;
     const amt = Math.max(0, Number(jamaAmount) || 0);
     if (amt <= 0) {
@@ -245,23 +245,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       note: jamaNote.trim(),
     });
 
-    if (sendWhatsApp) {
-      const text = buildSalesReceiptText(saved, shopProfile, activeCustomer);
-      const waUrl = buildWhatsAppUrl(saved.customerPhone, text);
-      const anchor = document.createElement('a');
-      anchor.href = waUrl;
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-    }
-
     setShowJamaForm(false);
     setJamaAmount('');
     setJamaNote('');
     setJamaError('');
-    onOpenReceipt(saved);
+    if (openReceiptModal) {
+      onOpenReceipt(saved);
+    }
   };
 
   const productsBySupplier = useMemo(
@@ -671,7 +661,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 {Object.keys(activeCustomer.customRates).length > 0 && (
                   <div className="pt-2 border-t border-slate-100">
                     <div className="text-xs font-semibold text-slate-500 mb-2">
-                      Active Custom Per-Unit Selling Rates
+                      Active Custom Case / Unit Selling Rates
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-700">
                       {Object.entries(activeCustomer.customRates).map(([pid, rate]) => {
@@ -738,8 +728,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               >
                                 <span className="truncate">
                                   {item.brandName} {item.productName} —{' '}
-                                  {formatUnitQty(item.quantity, item.unitLabel, item.unitPlural)} ×{' '}
-                                  {formatINR(item.unitRate)}
+                                  {formatQuantityWithPieces(
+                                    item.quantity,
+                                    item.unitLabel,
+                                    item.unitPlural,
+                                    item.piecesPerCase
+                                  )}{' '}
+                                  × {formatINR(item.unitRate)}/{item.unitLabel}
                                 </span>
                                 <span className="font-mono font-semibold text-slate-900 shrink-0">
                                   {formatINR(item.subtotal)}
@@ -913,13 +908,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 </div>
               </div>
 
-              {/* Custom Per-Unit Rate Overrides */}
+              {/* Custom Per-Case / Per-Unit Rate Overrides */}
               <div className="pt-3 border-t border-slate-200">
                 <h4 className="text-sm font-bold text-slate-900">
-                  Custom Per-Unit Selling Rates (Optional)
+                  Custom Selling Rates (Per Case / Jar / Piece)
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5 mb-3">
-                  Leave blank to automatically use the default per-unit selling rate from Settings.
+                  Leave blank to automatically use the default Case/Unit rate from Settings.
                 </p>
 
                 <div className="space-y-4">
@@ -938,6 +933,9 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               </div>
                               <div className="text-[11px] text-slate-500 tabular-nums">
                                 Default: {formatINR(prod.defaultSellingRate)}/{prod.unitLabel}
+                                {isCaseUnit(prod.unitLabel, prod.piecesPerCase)
+                                  ? ` (${prod.piecesPerCase} Pcs)`
+                                  : ''}
                               </div>
                             </div>
                             <input
@@ -953,7 +951,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 }))
                               }
                               placeholder={String(prod.defaultSellingRate)}
-                              aria-label={`Custom rate for ${prod.brandName} ${prod.name}`}
+                              aria-label={`Custom rate per ${prod.unitLabel} for ${prod.brandName} ${prod.name}`}
                               className="w-20 min-h-[38px] px-2 text-right rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-sky-600 focus:outline-none"
                             />
                           </div>

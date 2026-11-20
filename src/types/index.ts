@@ -17,7 +17,7 @@ export interface BusinessModuleMeta {
   sampleItems: string[];
 }
 
-export type UnitType = 'Bottle' | 'Jar' | 'Piece' | 'Bottle/Pack' | 'Pack' | 'Ream';
+export type UnitType = 'Case' | 'Jar' | 'Piece' | 'Bottle' | 'Bottle/Pack' | 'Pack' | 'Ream';
 
 export type PaymentMode = 'Cash' | 'UPI';
 
@@ -49,11 +49,11 @@ export interface Product {
   name: string;
   unitLabel: UnitType;
   unitPlural: string;
+  piecesPerCase: number; // > 1 for Case-based products (24, 12, 9), 1 for Jar/Piece
   defaultPurchaseRate: number;
   defaultSellingRate: number;
   stockUnits: number;
   lowStockThreshold: number;
-  defaultUnitsPerBox: number;
 }
 
 export interface Customer {
@@ -75,6 +75,7 @@ export interface BillLineItem {
   productName: string;
   unitLabel: UnitType;
   unitPlural: string;
+  piecesPerCase?: number;
   quantity: number;
   unitRate: number;
   subtotal: number;
@@ -105,6 +106,7 @@ export interface PurchaseLineItem {
   productName: string;
   unitLabel: UnitType;
   unitPlural: string;
+  piecesPerCase?: number;
   quantity: number;
   purchaseRate: number;
   subtotal: number;

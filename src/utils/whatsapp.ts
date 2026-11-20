@@ -1,5 +1,10 @@
 import { Customer, SalesTransaction, ShopProfile } from '../types';
-import { formatDisplayDate, formatINR, formatUnitQty, sanitizeIndianPhone } from './format';
+import {
+  formatDisplayDate,
+  formatINR,
+  formatQuantityWithPieces,
+  sanitizeIndianPhone,
+} from './format';
 
 export function buildSalesReceiptText(
   txn: SalesTransaction,
@@ -28,38 +33,45 @@ export function buildSalesReceiptText(
   if (txn.type === 'sale') {
     lines.push('*Items Delivered:*');
     txn.items.forEach((item) => {
-      const unitStr = formatUnitQty(item.quantity, item.unitLabel, item.unitPlural);
+      const unitStr = formatQuantityWithPieces(
+        item.quantity,
+        item.unitLabel,
+        item.unitPlural,
+        item.piecesPerCase
+      );
       lines.push(
-        `${item.brandName} ${item.productName}: ${unitStr} x ${formatINR(item.unitRate)} = ${formatINR(item.subtotal)}`
+        `${item.brandName} ${item.productName}: ${unitStr} x ${formatINR(item.unitRate)}/${item.unitLabel} = ${formatINR(item.subtotal)}`
       );
     });
     lines.push('------------------------------');
-    lines.push(`Today's Total: ${formatINR(txn.totalAmount)}`);
+    lines.push(`Today's Bill Total: ${formatINR(txn.totalAmount)}`);
     if (txn.previousDue !== 0) {
       lines.push(
         txn.previousDue > 0
-          ? `Previous Due: ${formatINR(txn.previousDue)}`
+          ? `Previous Pending Due: ${formatINR(txn.previousDue)}`
           : `Previous Advance: ${formatINR(Math.abs(txn.previousDue))}`
       );
     }
-    lines.push(`Paid (${txn.paymentMode}): ${formatINR(txn.amountPaid)}`);
+    const totalPayable = Math.round((txn.totalAmount + txn.previousDue) * 100) / 100;
+    lines.push(`Total Payable: ${formatINR(totalPayable)}`);
+    lines.push(`Amount Received Today (${txn.paymentMode}): ${formatINR(txn.amountPaid)}`);
     lines.push(
       txn.netDueAfter > 0
-        ? `*Total Pending Balance: ${formatINR(txn.netDueAfter)}*`
+        ? `*Remaining Pending Balance: ${formatINR(txn.netDueAfter)}*`
         : txn.netDueAfter < 0
-        ? `*Advance Balance: ${formatINR(Math.abs(txn.netDueAfter))}*`
-        : `*Total Pending Balance: ₹0 (Cleared)*`
+        ? `*Advance Credit Balance: ${formatINR(Math.abs(txn.netDueAfter))}*`
+        : `*Remaining Pending Balance: ₹0 (Cleared)*`
     );
   } else {
     lines.push('*Payment Received (Jama)*');
-    lines.push(`Previous Due: ${formatINR(txn.previousDue)}`);
+    lines.push(`Previous Pending Due: ${formatINR(txn.previousDue)}`);
     lines.push(`Received (${txn.paymentMode}): ${formatINR(txn.amountPaid)}`);
     lines.push(
       txn.netDueAfter > 0
         ? `*Remaining Pending Balance: ${formatINR(txn.netDueAfter)}*`
         : txn.netDueAfter < 0
         ? `*Advance Credit: ${formatINR(Math.abs(txn.netDueAfter))}*`
-        : `*Pending Balance: ₹0 (Cleared)*`
+        : `*Remaining Pending Balance: ₹0 (Cleared)*`
     );
   }
 
@@ -67,9 +79,10 @@ export function buildSalesReceiptText(
     lines.push(`Note: ${txn.note.trim()}`);
   }
 
-  if (shop.upiId.trim() && txn.netDueAfter > 0) {
+  if (shop.upiId.trim()) {
     lines.push('------------------------------');
     lines.push(`UPI ID: ${shop.upiId.trim()}`);
+    lines.push('PhonePe / GPay / Paytm accepted');
   }
 
   lines.push('Thank you for your business!');

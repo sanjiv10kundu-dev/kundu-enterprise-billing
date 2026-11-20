@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { BRAND_LOGO_URL, BUSINESS_MODULES } from '../data/seedData';
 import { AppDataState, Product, ShopProfile, Supplier, UnitType } from '../types';
-import { sanitizeIndianPhone } from '../utils/format';
+import { isCaseUnit, sanitizeIndianPhone } from '../utils/format';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface SettingsViewProps {
@@ -66,10 +66,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newProdSupplierId, setNewProdSupplierId] = useState(state.suppliers[0]?.id ?? 'sup_desertmina');
   const [newProdName, setNewProdName] = useState('');
-  const [newProdUnit, setNewProdUnit] = useState<UnitType>('Bottle');
+  const [newProdUnit, setNewProdUnit] = useState<UnitType>('Case');
   const [newProdBuyRate, setNewProdBuyRate] = useState('');
   const [newProdSellRate, setNewProdSellRate] = useState('');
-  const [newProdBoxUnits, setNewProdBoxUnits] = useState('12');
+  const [newProdPiecesPerCase, setNewProdPiecesPerCase] = useState('24');
 
   const [confirmClearSample, setConfirmClearSample] = useState(false);
   const [importError, setImportError] = useState('');
@@ -100,9 +100,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!supplier || !newProdName.trim()) return;
 
     const unitPluralMap: Record<UnitType, string> = {
-      Bottle: 'Bottles',
+      Case: 'Cases',
       Jar: 'Jars',
       Piece: 'Pieces',
+      Bottle: 'Bottles',
       'Bottle/Pack': 'Packs',
       Pack: 'Packs',
       Ream: 'Reams',
@@ -115,11 +116,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       name: newProdName.trim(),
       unitLabel: newProdUnit,
       unitPlural: unitPluralMap[newProdUnit],
+      piecesPerCase:
+        newProdUnit === 'Case' ? Math.max(2, parseInt(newProdPiecesPerCase, 10) || 12) : 1,
       defaultPurchaseRate: Math.max(0, Number(newProdBuyRate) || 0),
       defaultSellingRate: Math.max(0, Number(newProdSellRate) || 0),
       stockUnits: 0,
-      lowStockThreshold: 12,
-      defaultUnitsPerBox: Math.max(1, parseInt(newProdBoxUnits, 10) || 1),
+      lowStockThreshold: newProdUnit === 'Case' ? 3 : 8,
     });
 
     setNewProdName('');
@@ -240,13 +242,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  UPI ID (optional, shown on pending due bills)
+                  UPI ID (shown on JPG &amp; WhatsApp bills)
                 </label>
                 <input
                   type="text"
                   value={shopDraft.upiId}
                   onChange={(e) => setShopDraft({ ...shopDraft, upiId: e.target.value })}
-                  placeholder="e.g., kunduenterprise@upi"
+                  placeholder="e.g., samir10kundu1@ibl"
                   className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-300 font-mono text-xs text-slate-900"
                 />
               </div>
@@ -461,10 +463,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="px-4 sm:px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  Per-Unit Product Catalog &amp; Default Rates
+                  Case &amp; Unit Product Catalog &amp; Default Rates
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Every product is priced strictly per Bottle, Jar, Piece, or Pack.
+                  Set default purchase/selling rates per Case, Jar, or Piece and edit Pieces per Case.
                 </p>
               </div>
               <button
@@ -502,7 +504,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={newProdName}
                     onChange={(e) => setNewProdName(e.target.value)}
-                    placeholder="Product Name (e.g., 250ml Bottle)"
+                    placeholder="Product Name (e.g., 250ml Water Bottle)"
                     className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white text-xs text-slate-900"
                   />
                   <select
@@ -510,19 +512,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onChange={(e) => setNewProdUnit(e.target.value as UnitType)}
                     className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900"
                   >
-                    <option value="Bottle">Unit: Bottle</option>
+                    <option value="Case">Unit: Case</option>
                     <option value="Jar">Unit: Jar</option>
                     <option value="Piece">Unit: Piece</option>
-                    <option value="Bottle/Pack">Unit: Bottle/Pack</option>
                   </select>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newProdBoxUnits}
-                    onChange={(e) => setNewProdBoxUnits(e.target.value)}
-                    placeholder="Units per box"
-                    className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900"
-                  />
+                  {newProdUnit === 'Case' ? (
+                    <input
+                      type="number"
+                      min="2"
+                      value={newProdPiecesPerCase}
+                      onChange={(e) => setNewProdPiecesPerCase(e.target.value)}
+                      placeholder="Pieces per Case (e.g., 24)"
+                      className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900"
+                    />
+                  ) : (
+                    <div className="min-h-[40px] px-3 rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-500 flex items-center">
+                      Tracked directly per {newProdUnit}
+                    </div>
+                  )}
                   <input
                     type="number"
                     step="0.5"
@@ -530,7 +537,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={newProdBuyRate}
                     onChange={(e) => setNewProdBuyRate(e.target.value)}
-                    placeholder="Default Buy Rate (₹/unit)"
+                    placeholder={`Default Buy Rate (₹/${newProdUnit})`}
                     className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900"
                   />
                   <input
@@ -540,7 +547,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={newProdSellRate}
                     onChange={(e) => setNewProdSellRate(e.target.value)}
-                    placeholder="Default Sell Rate (₹/unit)"
+                    placeholder={`Default Sell Rate (₹/${newProdUnit})`}
                     className="min-h-[40px] px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900"
                   />
                 </div>
@@ -571,84 +578,116 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div className="divide-y divide-slate-100">
                     {state.products
                       .filter((p) => p.supplierId === sup.id)
-                      .map((prod) => (
-                        <div
-                          key={prod.id}
-                          className="p-4 sm:px-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center"
-                        >
-                          <div className="sm:col-span-5">
-                            <div className="text-sm font-bold text-slate-900">{prod.name}</div>
-                            <div className="text-xs text-slate-500">
-                              Unit: {prod.unitLabel} · Box helper: {prod.defaultUnitsPerBox}{' '}
-                              {prod.unitPlural}
+                      .map((prod) => {
+                        const isCase = isCaseUnit(prod.unitLabel, prod.piecesPerCase);
+                        return (
+                          <div
+                            key={prod.id}
+                            className="p-4 sm:px-5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center"
+                          >
+                            <div className="sm:col-span-4">
+                              <div className="text-sm font-bold text-slate-900">{prod.name}</div>
+                              <div className="text-xs text-slate-500">
+                                {isCase
+                                  ? `Unit: Case (${prod.piecesPerCase} Pcs/Case)`
+                                  : `Unit: ${prod.unitLabel}`}
+                              </div>
+                            </div>
+
+                            <div
+                              className={`sm:col-span-8 grid gap-2 ${
+                                prod.unitLabel === 'Case' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+                              }`}
+                            >
+                              {prod.unitLabel === 'Case' && (
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                                    Pcs / Case
+                                  </label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="2"
+                                    value={prod.piecesPerCase}
+                                    onChange={(e) =>
+                                      onUpdateProduct({
+                                        ...prod,
+                                        piecesPerCase: Math.max(
+                                          2,
+                                          parseInt(e.target.value, 10) || 2
+                                        ),
+                                      })
+                                    }
+                                    className="w-full min-h-[40px] px-2.5 rounded-lg border border-orange-300 bg-orange-50/40 font-mono text-xs font-bold text-slate-900 tabular-nums"
+                                  />
+                                </div>
+                              )}
+
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                                  Buy ₹/{prod.unitLabel}
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.5"
+                                  min="0"
+                                  value={prod.defaultPurchaseRate}
+                                  onChange={(e) =>
+                                    onUpdateProduct({
+                                      ...prod,
+                                      defaultPurchaseRate: Math.max(0, Number(e.target.value) || 0),
+                                    })
+                                  }
+                                  className="w-full min-h-[40px] px-2.5 rounded-lg border border-slate-300 font-mono text-xs font-bold text-slate-900 tabular-nums"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                                  Sell ₹/{prod.unitLabel}
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.5"
+                                  min="0"
+                                  value={prod.defaultSellingRate}
+                                  onChange={(e) =>
+                                    onUpdateProduct({
+                                      ...prod,
+                                      defaultSellingRate: Math.max(0, Number(e.target.value) || 0),
+                                    })
+                                  }
+                                  className="w-full min-h-[40px] px-2.5 rounded-lg border border-sky-300 bg-sky-50/40 font-mono text-xs font-bold text-sky-950 tabular-nums"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                                  Low Alert
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  value={prod.lowStockThreshold}
+                                  onChange={(e) =>
+                                    onUpdateProduct({
+                                      ...prod,
+                                      lowStockThreshold: Math.max(
+                                        0,
+                                        parseInt(e.target.value, 10) || 0
+                                      ),
+                                    })
+                                  }
+                                  className="w-full min-h-[40px] px-2.5 rounded-lg border border-slate-300 font-mono text-xs font-bold text-slate-900 tabular-nums"
+                                />
+                              </div>
                             </div>
                           </div>
-
-                          <div className="sm:col-span-7 grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                                Buy ₹/{prod.unitLabel}
-                              </label>
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="0.5"
-                                min="0"
-                                value={prod.defaultPurchaseRate}
-                                onChange={(e) =>
-                                  onUpdateProduct({
-                                    ...prod,
-                                    defaultPurchaseRate: Math.max(0, Number(e.target.value) || 0),
-                                  })
-                                }
-                                className="w-full min-h-[40px] px-2.5 rounded-lg border border-slate-300 font-mono text-xs font-bold text-slate-900 tabular-nums"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                                Sell ₹/{prod.unitLabel}
-                              </label>
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="0.5"
-                                min="0"
-                                value={prod.defaultSellingRate}
-                                onChange={(e) =>
-                                  onUpdateProduct({
-                                    ...prod,
-                                    defaultSellingRate: Math.max(0, Number(e.target.value) || 0),
-                                  })
-                                }
-                                className="w-full min-h-[40px] px-2.5 rounded-lg border border-sky-300 bg-sky-50/40 font-mono text-xs font-bold text-sky-950 tabular-nums"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                                Low Alert
-                              </label>
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                min="0"
-                                value={prod.lowStockThreshold}
-                                onChange={(e) =>
-                                  onUpdateProduct({
-                                    ...prod,
-                                    lowStockThreshold: Math.max(
-                                      0,
-                                      parseInt(e.target.value, 10) || 0
-                                    ),
-                                  })
-                                }
-                                className="w-full min-h-[40px] px-2.5 rounded-lg border border-slate-300 font-mono text-xs font-bold text-slate-900 tabular-nums"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 </div>
               ))}

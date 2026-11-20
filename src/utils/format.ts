@@ -13,6 +13,24 @@ export function formatUnitQty(qty: number, singular: string, plural: string): st
   return `${qty} ${qty === 1 ? singular : plural}`;
 }
 
+export function isCaseUnit(unitLabel: string, piecesPerCase?: number): boolean {
+  return unitLabel === 'Case' && typeof piecesPerCase === 'number' && piecesPerCase > 1;
+}
+
+export function formatQuantityWithPieces(
+  qty: number,
+  singular: string,
+  plural: string,
+  piecesPerCase?: number
+): string {
+  const base = formatUnitQty(qty, singular, plural);
+  if (isCaseUnit(singular, piecesPerCase)) {
+    const totalPieces = qty * (piecesPerCase as number);
+    return `${base} (${totalPieces} Pcs)`;
+  }
+  return base;
+}
+
 export function getTodayISO(): string {
   const now = new Date();
   const y = now.getFullYear();
