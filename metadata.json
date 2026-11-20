@@ -1,0 +1,6 @@
+{
+  "name": "Kundu Enterprise",
+  "description": "Mobile-first wholesale and retail water distribution billing, customer khata, stock, and WhatsApp dispatch PWA for Kundu Enterprise.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
