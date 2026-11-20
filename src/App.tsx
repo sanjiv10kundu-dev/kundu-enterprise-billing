@@ -21,6 +21,7 @@ import { BRAND_LOGO_URL, BUSINESS_MODULES } from './data/seedData';
 import {
   buildTransactionsCsv,
   dataRepository,
+  shareBackupFile,
   triggerFileDownload,
 } from './services/storage';
 import {
@@ -405,6 +406,22 @@ export default function App() {
     showToast('JSON backup downloaded');
   };
 
+  const handleShareJson = async () => {
+    const json = dataRepository.exportJson(state);
+    const filename = `kundu-enterprise-backup-${getTodayISO()}.json`;
+    const result = await shareBackupFile(
+      json,
+      filename,
+      'application/json',
+      'Kundu Enterprise Data Backup'
+    );
+    if (result === 'shared') {
+      showToast('Backup shared successfully');
+    } else if (result === 'fallback_downloaded') {
+      showToast('Share unavailable on this browser — backup downloaded instead', 'info');
+    }
+  };
+
   const handleExportCsv = () => {
     const csv = buildTransactionsCsv(state);
     triggerFileDownload(
@@ -665,6 +682,7 @@ export default function App() {
             onUpdateProduct={handleUpdateProduct}
             onAddProduct={handleAddProduct}
             onExportJson={handleExportJson}
+            onShareJson={handleShareJson}
             onExportCsv={handleExportCsv}
             onImportJson={handleImportJson}
             onClearSampleData={handleClearSampleData}

@@ -42,11 +42,16 @@ export function cleanContactPhone(rawPhone: string): string {
 }
 
 export function isContactPickerSupported(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    'contacts' in navigator &&
-    typeof navigator.contacts?.select === 'function'
-  );
+  try {
+    return (
+      typeof navigator !== 'undefined' &&
+      navigator !== null &&
+      'contacts' in navigator &&
+      typeof navigator.contacts?.select === 'function'
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function pickPhoneContact(): Promise<ContactPickResult> {

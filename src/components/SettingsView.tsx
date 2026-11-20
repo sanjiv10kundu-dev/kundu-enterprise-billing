@@ -7,6 +7,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Share2,
   Upload,
 } from 'lucide-react';
 import { BRAND_LOGO_URL, BUSINESS_MODULES } from '../data/seedData';
@@ -21,6 +22,7 @@ interface SettingsViewProps {
   onUpdateProduct: (product: Product) => void;
   onAddProduct: (product: Omit<Product, 'id'>) => void;
   onExportJson: () => void;
+  onShareJson: () => void;
   onExportCsv: () => void;
   onImportJson: (raw: string) => void;
   onClearSampleData: () => void;
@@ -33,6 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateProduct,
   onAddProduct,
   onExportJson,
+  onShareJson,
   onExportCsv,
   onImportJson,
   onClearSampleData,
@@ -366,7 +369,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="min-h-[44px] px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50 inline-flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4 text-sky-700" />
-                <span>Export JSON Backup</span>
+                <span>Download JSON</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onShareJson}
+                className="min-h-[44px] px-3.5 rounded-xl border border-sky-200 bg-sky-50 text-[#0B2C6F] text-xs font-bold hover:bg-sky-100 inline-flex items-center justify-center gap-2"
+              >
+                <Share2 className="w-4 h-4 text-sky-700" />
+                <span>Share Backup</span>
               </button>
 
               <button
@@ -388,10 +400,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={onExportCsv}
-                className="sm:col-span-2 min-h-[44px] px-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-bold hover:bg-emerald-100 inline-flex items-center justify-center gap-2"
+                className="min-h-[44px] px-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-bold hover:bg-emerald-100 inline-flex items-center justify-center gap-2"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span>Export Transactions CSV (Excel)</span>
+                <span>Export CSV (Excel)</span>
               </button>
             </div>
 
