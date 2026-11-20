@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  BookUser,
   ChevronRight,
   Edit3,
   IndianRupee,
@@ -30,6 +31,7 @@ import {
   sanitizeIndianPhone,
 } from '../utils/format';
 import { buildSalesReceiptText, buildWhatsAppUrl } from '../utils/whatsapp';
+import { pickPhoneContact } from '../utils/contacts';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -38,6 +40,7 @@ interface CustomersViewProps {
   transactions: SalesTransaction[];
   shopProfile: ShopProfile;
   openAddModalOnMount?: boolean;
+  prefillContact?: { name: string; phone: string } | null;
   onConsumedAddModal?: () => void;
   onSaveCustomer: (customer: Omit<Customer, 'id' | 'createdAt'> & { id?: string }) => void;
   onDeleteCustomer: (customerId: string) => void;
@@ -59,6 +62,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   transactions,
   shopProfile,
   openAddModalOnMount,
+  prefillContact,
   onConsumedAddModal,
   onSaveCustomer,
   onDeleteCustomer,
@@ -75,13 +79,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Customer editor form state
-  const [nameInput, setNameInput] = useState('');
-  const [phoneInput, setPhoneInput] = useState('');
+  const [nameInput, setNameInput] = useState(prefillContact?.name ?? '');
+  const [phoneInput, setPhoneInput] = useState(prefillContact?.phone ?? '');
   const [addressInput, setAddressInput] = useState('');
   const [typeInput, setTypeInput] = useState<CustomerType>('Retailer');
   const [openingDueInput, setOpeningDueInput] = useState('0');
   const [customRatesInput, setCustomRatesInput] = useState<Record<string, string>>({});
   const [editorError, setEditorError] = useState('');
+  const [contactHint, setContactHint] = useState('');
 
   // Standalone Jama (payment received) state
   const [jamaAmount, setJamaAmount] = useState('');
@@ -92,10 +97,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
   React.useEffect(() => {
     if (openAddModalOnMount) {
-      openCreateModal();
+      openCreateModal(prefillContact);
       onConsumedAddModal?.();
     }
-  }, [openAddModalOnMount]);
+  }, [openAddModalOnMount, prefillContact]);
 
   const activeCustomer = useMemo(
     () => customers.find((c) => c.id === activeCustomerId) ?? null,
@@ -134,16 +139,40 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [transactions, activeCustomer]);
 
-  const openCreateModal = () => {
+  const openCreateModal = (prefill?: { name: string; phone: string } | null) => {
     setEditingCustomer(null);
-    setNameInput('');
-    setPhoneInput('');
+    setNameInput(prefill?.name ?? '');
+    setPhoneInput(prefill?.phone ?? '');
     setAddressInput('');
     setTypeInput('Retailer');
     setOpeningDueInput('0');
     setCustomRatesInput({});
     setEditorError('');
+    setContactHint('');
     setShowEditor(true);
+  };
+
+  const handleAddCustomerClick = async () => {
+    const result = await pickPhoneContact();
+    if (result.status === 'selected') {
+      openCreateModal({ name: result.name, phone: result.phone });
+    } else {
+      openCreateModal(null);
+    }
+  };
+
+  const handlePickContactInModal = async () => {
+    const result = await pickPhoneContact();
+    if (result.status === 'selected') {
+      if (result.name) setNameInput(result.name);
+      if (result.phone) setPhoneInput(result.phone);
+      setContactHint('');
+      setEditorError('');
+    } else if (result.status === 'unsupported') {
+      setContactHint('Contact picker is supported on mobile Chrome. Please enter details manually.');
+    } else {
+      setContactHint('');
+    }
   };
 
   const openEditModal = (cust: Customer) => {
@@ -159,6 +188,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     });
     setCustomRatesInput(rateStrings);
     setEditorError('');
+    setContactHint('');
     setShowEditor(true);
   };
 
@@ -279,7 +309,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <h2 className="text-base font-bold text-slate-900">Customer Khata</h2>
                 <button
                   type="button"
-                  onClick={openCreateModal}
+                  onClick={handleAddCustomerClick}
                   className="min-h-[42px] px-3.5 py-2 rounded-xl bg-sky-700 text-white text-xs font-bold inline-flex items-center gap-1.5 hover:bg-sky-800 transition-colors whitespace-nowrap shrink-0"
                 >
                   <UserPlus className="w-4 h-4" />
@@ -781,10 +811,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Customer Name *
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label
+                      htmlFor="customer-name-input"
+                      className="block text-xs font-semibold text-slate-700"
+                    >
+                      Customer Name *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handlePickContactInModal}
+                      title="Pick from Phone Contacts"
+                      className="inline-flex items-center gap-1 px-2 py-1 -my-1 rounded-lg text-[11px] font-bold text-sky-700 hover:bg-sky-50 active:bg-sky-100 transition-colors whitespace-nowrap shrink-0"
+                    >
+                      <BookUser className="w-3.5 h-3.5 shrink-0" />
+                      <span>Pick from Contacts</span>
+                    </button>
+                  </div>
                   <input
+                    id="customer-name-input"
                     type="text"
                     required
                     value={nameInput}
@@ -794,10 +839,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label
+                    htmlFor="customer-phone-input"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
                     WhatsApp Mobile (10-digit)
                   </label>
                   <input
+                    id="customer-phone-input"
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
@@ -808,6 +857,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   />
                 </div>
               </div>
+
+              {contactHint && (
+                <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  {contactHint}
+                </p>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">

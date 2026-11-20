@@ -23,7 +23,7 @@ export const Toast: React.FC<ToastProps> = ({ toast, onDismiss }) => {
       : 'bg-slate-900 text-white';
 
   return (
-    <div className="fixed top-16 md:top-20 right-4 left-4 md:left-auto z-50 flex justify-end pointer-events-none">
+    <div className="fixed top-16 md:top-20 right-4 left-4 md:left-auto z-[60] flex justify-end pointer-events-none">
       <div
         role="status"
         className={`pointer-events-auto flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-lg max-w-md ${toneClasses}`}

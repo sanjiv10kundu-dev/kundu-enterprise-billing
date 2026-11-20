@@ -35,6 +35,7 @@ import {
   ShopProfile,
   Supplier,
 } from './types';
+import { pickPhoneContact } from './utils/contacts';
 import { generateId, getTodayISO } from './utils/format';
 
 const NAV_ITEMS: { id: NavTab; label: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -50,6 +51,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('quick-bill');
   const [selectedBillingCustomerId, setSelectedBillingCustomerId] = useState<string | null>(null);
   const [openAddCustomerModal, setOpenAddCustomerModal] = useState(false);
+  const [prefillContact, setPrefillContact] = useState<{ name: string; phone: string } | null>(
+    null
+  );
   const [receiptTxn, setReceiptTxn] = useState<SalesTransaction | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -63,6 +67,17 @@ export default function App() {
     window.setTimeout(() => {
       setToast((curr) => (curr && curr.id === id ? null : curr));
     }, 3200);
+  };
+
+  const handleStartAddCustomer = async () => {
+    const result = await pickPhoneContact();
+    if (result.status === 'selected') {
+      setPrefillContact({ name: result.name, phone: result.phone });
+    } else {
+      setPrefillContact(null);
+    }
+    setOpenAddCustomerModal(true);
+    setActiveTab('customers');
   };
 
   const activeModule = useMemo(
@@ -580,10 +595,7 @@ export default function App() {
             onSelectCustomer={setSelectedBillingCustomerId}
             onSaveSale={handleSaveSale}
             onOpenReceipt={setReceiptTxn}
-            onNavigateAddCustomer={() => {
-              setOpenAddCustomerModal(true);
-              setActiveTab('customers');
-            }}
+            onNavigateAddCustomer={handleStartAddCustomer}
           />
         )}
 
@@ -595,7 +607,11 @@ export default function App() {
             transactions={state.transactions}
             shopProfile={state.shopProfile}
             openAddModalOnMount={openAddCustomerModal}
-            onConsumedAddModal={() => setOpenAddCustomerModal(false)}
+            prefillContact={prefillContact}
+            onConsumedAddModal={() => {
+              setOpenAddCustomerModal(false);
+              setPrefillContact(null);
+            }}
             onSaveCustomer={handleSaveCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onRecordPayment={handleRecordPayment}

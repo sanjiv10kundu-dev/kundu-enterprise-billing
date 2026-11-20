@@ -55,6 +55,24 @@ export function sanitizeIndianPhone(phone: string): string {
   return digits.slice(0, 10);
 }
 
+/**
+ * Cleans phone numbers imported from a mobile phonebook/contacts directory.
+ * Strips +91, 0091, leading zeros, spaces, dashes, and brackets to return a 10-digit Indian mobile number.
+ */
+export function cleanContactPhone(raw: string): string {
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('0091') && digits.length >= 14) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith('91') && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+  digits = digits.replace(/^0+/, '');
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+}
+
 export function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
